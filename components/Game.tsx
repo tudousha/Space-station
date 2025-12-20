@@ -1,0 +1,475 @@
+
+import React, { useRef, useEffect, useState } from 'react';
+import UIOverlay from './UIOverlay';
+import { GameState, DeviceType } from '../types';
+import { audioManager } from '../utils/audio';
+import { 
+  TARGET_STATION_SPIN, 
+  INITIAL_DISTANCE, 
+  APPROACH_SPEED, 
+  DOCKING_THRESHOLD_DISTANCE,
+  SPIN_MATCH_EPSILON,
+  TILT_MATCH_THRESHOLD,
+  TILT_DRIFT_MULTIPLIER,
+  MAX_DRIFT_RADIUS,
+  STABILIZATION_DECEL,
+  MISSION_TIME,
+  STABILIZATION_TARGET_RAD
+} from '../constants';
+
+interface GameProps {
+  onFinish: (success: boolean) => void;
+  onDocking: () => void;
+  onReset: () => void;
+  isPaused: boolean;
+  status: GameState;
+  deviceType: DeviceType;
+  externalRotationDelta: number;
+}
+
+interface Star {
+  x: number;
+  y: number;
+  size: number;
+  brightness: number;
+}
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+}
+
+const Game: React.FC<GameProps> = ({ 
+  onFinish, 
+  onDocking, 
+  onReset, 
+  isPaused, 
+  status, 
+  deviceType,
+  externalRotationDelta 
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isMobile = deviceType === DeviceType.MOBILE;
+  const starsRef = useRef<Star[]>([]);
+  const particlesRef = useRef<Particle[]>([]);
+  
+  const stateRef = useRef({
+    stationRotation: 0,
+    currentStationSpin: TARGET_STATION_SPIN,
+    shipRotation: 0,
+    shipRotationSpeed: 0,
+    distance: INITIAL_DISTANCE,
+    tilt: { beta: 0, gamma: 0 },
+    lastUpdate: 0,
+    isFinished: false,
+    dockingProgress: 0,
+    isMouseDown: false,
+    lastMouseX: 0,
+    gameStartTime: 0,
+    timeLeft: MISSION_TIME,
+    failureReason: '',
+    syncTimer: 0,
+    activeThrust: 0,
+    wasSync: false,
+    wasAligned: false,
+    lastProximityBeep: 0
+  });
+
+  const [uiState, setUiState] = useState({
+    shipSpin: 0,
+    targetSpin: TARGET_STATION_SPIN,
+    distance: INITIAL_DISTANCE,
+    tiltX: 0,
+    tiltY: 0,
+    timeLeft: MISSION_TIME,
+    failureReason: ''
+  });
+
+  useEffect(() => {
+    audioManager.init();
+    if (status === GameState.PLAYING || status === GameState.STABILIZING) {
+      audioManager.playMusic(); 
+    }
+
+    // High-performance starfield generation
+    const stars: Star[] = [];
+    const count = 1200; 
+    const radius = Math.max(window.innerWidth, window.innerHeight) * 2.5;
+    for (let i = 0; i < count; i++) {
+      const r = Math.sqrt(Math.random()) * radius;
+      const theta = Math.random() * Math.PI * 2;
+      stars.push({
+        x: Math.cos(theta) * r,
+        y: Math.sin(theta) * r,
+        size: 0.5 + Math.random() * 2.5, 
+        brightness: 0.3 + Math.random() * 0.7 
+      });
+    }
+    starsRef.current = stars;
+
+    return () => {
+      audioManager.stopAll();
+    };
+  }, [status]);
+
+  useEffect(() => {
+    if (status === GameState.PLAYING) {
+      stateRef.current.shipRotationSpeed += externalRotationDelta;
+    } else if (status === GameState.STABILIZING) {
+      stateRef.current.currentStationSpin -= externalRotationDelta;
+    }
+  }, [externalRotationDelta, status]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      stateRef.current.tilt = { beta: e.beta || 0, gamma: e.gamma || 0 };
+    };
+    window.addEventListener('deviceorientation', handleOrientation);
+    return () => window.removeEventListener('deviceorientation', handleOrientation);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (status === GameState.SUCCESS || status === GameState.FAILED) return;
+      audioManager.resume();
+      
+      const nx = (e.clientX / window.innerWidth) * 2 - 1;
+      const ny = (e.clientY / window.innerHeight) * 2 - 1;
+      
+      if (status === GameState.PLAYING) {
+        stateRef.current.tilt = {
+          beta: ny * 60,
+          gamma: nx * 60
+        };
+      }
+
+      if (stateRef.current.isMouseDown) {
+        const deltaX = e.clientX - stateRef.current.lastMouseX;
+        const multiplier = status === GameState.STABILIZING ? -0.0005 : 0.0005; 
+        stateRef.current.shipRotationSpeed += deltaX * multiplier;
+        stateRef.current.lastMouseX = e.clientX;
+      }
+    };
+    const handleMouseDown = (e: MouseEvent) => {
+      stateRef.current.isMouseDown = true;
+      stateRef.current.lastMouseX = e.clientX;
+      audioManager.resume();
+    };
+    const handleMouseUp = () => {
+      stateRef.current.isMouseDown = false;
+    };
+    const handleWheel = (e: WheelEvent) => {
+      if (status === GameState.SUCCESS || status === GameState.FAILED) return;
+      audioManager.resume();
+      const multiplier = status === GameState.STABILIZING ? 0.00005 : -0.00005; 
+      stateRef.current.shipRotationSpeed += e.deltaY * multiplier;
+      if (e.cancelable) e.preventDefault();
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, [isMobile, status]);
+
+  const drawThruster = (ctx: CanvasRenderingContext2D, x: number, y: number, power: number, direction: number) => {
+    if (power <= 0.05) return;
+    const flicker = 0.8 + Math.random() * 0.4;
+    const length = power * 60 * flicker;
+    const width = 6 + power * 15;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, direction);
+    ctx.shadowBlur = 15 * power;
+    ctx.shadowColor = 'rgba(96, 165, 250, 0.8)';
+    const grad = ctx.createLinearGradient(0, 0, 0, length);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    grad.addColorStop(0.2, 'rgba(96, 165, 250, 1)');
+    grad.addColorStop(1, 'rgba(30, 58, 138, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(-width / 2, 0);
+    ctx.quadraticCurveTo(0, length * 1.2, width / 2, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+
+    const render = (time: number) => {
+      const { current: state } = stateRef;
+      if (!state.gameStartTime) state.gameStartTime = time;
+
+      // Update active thrust visual intensity
+      let rawThrust = Math.abs(externalRotationDelta) * 50; 
+      if (state.isMouseDown) rawThrust += 0.5;
+      state.activeThrust = state.activeThrust * 0.9 + Math.min(1.0, rawThrust) * 0.1;
+
+      if (status === GameState.PLAYING) {
+        const elapsed = (time - state.gameStartTime) / 1000;
+        state.timeLeft = Math.max(0, MISSION_TIME - elapsed);
+        
+        if (state.timeLeft <= 0) {
+          state.isFinished = true;
+          state.failureReason = 'Time';
+          audioManager.playFailure();
+          onFinish(false);
+          return;
+        }
+
+        state.stationRotation += state.currentStationSpin;
+        state.shipRotation += state.shipRotationSpeed;
+        state.distance -= APPROACH_SPEED;
+
+        audioManager.updateBuzz(state.shipRotationSpeed);
+        audioManager.updateTension(state.distance / INITIAL_DISTANCE);
+
+        // Proximity alert logic
+        if (state.distance < 800) {
+          const proximityIntensity = 1 - (state.distance / 800);
+          const beepInterval = 1000 - (proximityIntensity * 900);
+          if (time - state.lastProximityBeep > beepInterval) {
+            audioManager.playProximityAlert(proximityIntensity);
+            state.lastProximityBeep = time;
+          }
+        }
+
+        // Drift calculation
+        const driftX = state.tilt.gamma * TILT_DRIFT_MULTIPLIER;
+        const driftY = state.tilt.beta * TILT_DRIFT_MULTIPLIER;
+        const driftDistance = Math.sqrt(driftX * driftX + driftY * driftY);
+        
+        if (driftDistance > MAX_DRIFT_RADIUS) {
+          state.isFinished = true;
+          state.failureReason = 'Boundary';
+          audioManager.playFailure();
+          onFinish(false);
+          return;
+        }
+
+        const spinDiff = Math.abs(state.shipRotationSpeed - state.currentStationSpin);
+        const spinMatch = spinDiff < SPIN_MATCH_EPSILON;
+        const tiltSeverity = Math.sqrt(state.tilt.beta ** 2 + state.tilt.gamma ** 2);
+        const tiltMatch = tiltSeverity < TILT_MATCH_THRESHOLD;
+
+        if (spinMatch && !state.wasSync) audioManager.playSyncAchieved();
+        state.wasSync = spinMatch;
+        if (tiltMatch && !state.wasAligned) audioManager.playAlignmentAchieved();
+        state.wasAligned = tiltMatch;
+
+        if (state.distance <= DOCKING_THRESHOLD_DISTANCE) {
+          if (spinMatch && tiltMatch) {
+            onDocking(); 
+          } else {
+            state.isFinished = true;
+            state.failureReason = 'Collision';
+            audioManager.playFailure();
+            onFinish(false);
+            return;
+          }
+        }
+      } else if (status === GameState.DOCKING) {
+        state.currentStationSpin *= STABILIZATION_DECEL;
+        state.shipRotationSpeed = state.currentStationSpin;
+        state.stationRotation += state.currentStationSpin;
+        state.shipRotation = state.stationRotation;
+        state.distance = Math.max(0, state.distance - 0.5);
+        if (state.distance <= 0) onFinish(false);
+      } else if (status === GameState.STABILIZING) {
+        state.shipRotationSpeed = state.currentStationSpin;
+        state.stationRotation += state.currentStationSpin;
+        state.shipRotation = state.stationRotation;
+        state.distance = 0;
+        const diff = Math.abs(state.currentStationSpin - STABILIZATION_TARGET_RAD);
+        if (diff < 0.005) {
+          state.syncTimer += 1;
+          if (state.syncTimer > 120) { 
+            audioManager.playSuccess();
+            onFinish(true);
+          }
+        } else {
+          state.syncTimer = 0;
+        }
+      }
+
+      // Throttle UI updates for performance
+      if (time - state.lastUpdate > 50) {
+        setUiState({
+          shipSpin: status === GameState.STABILIZING ? state.currentStationSpin : state.shipRotationSpeed,
+          targetSpin: status === GameState.STABILIZING ? STABILIZATION_TARGET_RAD : state.currentStationSpin,
+          distance: state.distance,
+          tiltX: state.tilt.beta,
+          tiltY: state.tilt.gamma,
+          timeLeft: state.timeLeft,
+          failureReason: state.failureReason
+        });
+        state.lastUpdate = time;
+      }
+
+      // --- RENDERING ---
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      // Screen Shake (Atmospheric Tension)
+      const currentSpin = status === GameState.STABILIZING ? state.currentStationSpin : state.shipRotationSpeed;
+      const shakeMag = 0.2 + (Math.abs(currentSpin) * 12);
+      const shakeX = (Math.random() - 0.5) * shakeMag;
+      const shakeY = (Math.random() - 0.5) * shakeMag;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      
+      const worldRotation = -state.shipRotation;
+
+      // Draw Stars
+      ctx.save();
+      ctx.translate(cx + shakeX, cy + shakeY);
+      ctx.rotate(worldRotation);
+      starsRef.current.forEach(star => {
+        ctx.globalAlpha = star.brightness;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(star.x, star.y, star.size, star.size);
+      });
+      ctx.restore();
+
+      const viewScale = Math.max(0.1, (INITIAL_DISTANCE - state.distance) / INITIAL_DISTANCE * 2.5 + 0.4);
+      const driftX = state.tilt.gamma * TILT_DRIFT_MULTIPLIER;
+      const driftY = state.tilt.beta * TILT_DRIFT_MULTIPLIER;
+
+      // --- SPACE STATION (ENDURANCE) ---
+      ctx.save();
+      ctx.translate(cx - driftX + shakeX, cy - driftY + shakeY);
+      ctx.rotate(state.stationRotation + worldRotation);
+      ctx.scale(viewScale, viewScale);
+      
+      // Structural Bracing
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 4; i++) {
+        ctx.save();
+        ctx.rotate(i * Math.PI / 2);
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(150, 0); ctx.stroke();
+        ctx.restore();
+      }
+
+      // Main Hub
+      ctx.fillStyle = '#111';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.arc(0, 0, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      // Outer Ring Hull
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(0, 0, 150, 0, Math.PI * 2); ctx.stroke();
+      
+      // Pod Modules
+      for (let i = 0; i < 12; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2) / 12 * i);
+        ctx.fillStyle = i % 3 === 0 ? '#444' : '#aaa';
+        ctx.fillRect(140, -15, 20, 30);
+        ctx.restore();
+      }
+
+      // Port Identifier
+      ctx.fillStyle = '#900';
+      ctx.beginPath(); ctx.arc(45, 0, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+      // --- RANGER (PLAYER) & HUD ---
+      ctx.save();
+      ctx.translate(cx + shakeX, cy + shakeY);
+      const shipScale = Math.min(1.0, viewScale);
+      ctx.scale(shipScale, shipScale);
+      
+      // Crosshair
+      ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); 
+      ctx.moveTo(-40, 0); ctx.lineTo(-10, 0); 
+      ctx.moveTo(40, 0); ctx.lineTo(10, 0);
+      ctx.moveTo(0, -40); ctx.lineTo(0, -10);
+      ctx.moveTo(0, 40); ctx.lineTo(0, 10);
+      ctx.stroke();
+
+      // Active Thrusters
+      if (status === GameState.PLAYING || status === GameState.STABILIZING) {
+        if (state.activeThrust > 0.01) {
+          if (state.shipRotationSpeed > 0) {
+            drawThruster(ctx, -28, -15, state.activeThrust, -1);
+            drawThruster(ctx, 24, 15, state.activeThrust, 1);
+          } else {
+            drawThruster(ctx, 24, -15, state.activeThrust, -1);
+            drawThruster(ctx, -28, 15, state.activeThrust, 1);
+          }
+        }
+      }
+
+      // Ranger Hull Geometry
+      ctx.fillStyle = '#e5e7eb'; 
+      ctx.strokeStyle = '#111'; 
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-35, 5); ctx.lineTo(-45, 15); ctx.lineTo(45, 15); ctx.lineTo(35, 5);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#f9fafb';
+      ctx.beginPath();
+      ctx.moveTo(-20, -18); ctx.lineTo(20, -18); ctx.lineTo(25, 12); ctx.lineTo(-25, 12);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+
+      ctx.restore();
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    animationFrameId = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [status, onFinish, onDocking, externalRotationDelta]);
+
+  return (
+    <div className="w-full h-full relative">
+      <canvas ref={canvasRef} className="w-full h-full" />
+      <UIOverlay 
+        {...uiState} 
+        isFinished={status === GameState.SUCCESS || status === GameState.FAILED}
+        status={status}
+        onRetry={onReset}
+      />
+    </div>
+  );
+};
+
+export default Game;

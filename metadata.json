@@ -1,0 +1,7 @@
+{
+  "name": "Interstellar Docking Simulator",
+  "description": "A high-intensity space simulation where you must manually dock a Ranger spacecraft with a spinning Endurance station using hand gestures and device orientation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
