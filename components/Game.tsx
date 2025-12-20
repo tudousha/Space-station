@@ -71,6 +71,7 @@ const Game: React.FC<GameProps> = ({
     dockingProgress: 0,
     isMouseDown: false,
     lastMouseX: 0,
+    lastTouchX: 0,
     gameStartTime: 0,
     timeLeft: MISSION_TIME,
     failureReason: '',
@@ -101,7 +102,6 @@ const Game: React.FC<GameProps> = ({
     const nebulae: Nebula[] = [];
     const worldSize = Math.max(window.innerWidth, window.innerHeight) * 3;
     
-    // 1. Generate Nebulae (Deep Space Background)
     const nebulaColors = ['rgba(30, 58, 138, 0.1)', 'rgba(88, 28, 135, 0.1)', 'rgba(15, 23, 42, 0.15)'];
     for (let i = 0; i < 8; i++) {
       nebulae.push({
@@ -114,43 +114,24 @@ const Game: React.FC<GameProps> = ({
     }
     nebulaeRef.current = nebulae;
 
-    // 2. Generate Starfield with clusters
     const starColors = ['#ffffff', '#fff4ea', '#f8f7ff', '#cad8ff', '#fff5f2'];
-    
     const createStar = (x: number, y: number, layer: number) => {
       const sizeBase = Math.random();
       let size = 0.5;
       let brightness = 0.3;
       let hasHalo = false;
-
-      if (layer === 0) { // Distant
-        size = 0.3 + Math.random() * 0.5;
-        brightness = 0.2 + Math.random() * 0.4;
-      } else if (layer === 1) { // Mid
-        size = 0.8 + Math.random() * 1.2;
-        brightness = 0.5 + Math.random() * 0.5;
-      } else { // Near
-        size = 1.8 + Math.random() * 2.2;
-        brightness = 0.8 + Math.random() * 0.2;
-        hasHalo = sizeBase > 0.8;
-      }
-
-      return {
-        x, y, size, brightness,
-        color: starColors[Math.floor(Math.random() * starColors.length)],
-        hasHalo, layer
-      };
+      if (layer === 0) { size = 0.3 + Math.random() * 0.5; brightness = 0.2 + Math.random() * 0.4; }
+      else if (layer === 1) { size = 0.8 + Math.random() * 1.2; brightness = 0.5 + Math.random() * 0.5; }
+      else { size = 1.8 + Math.random() * 2.2; brightness = 0.8 + Math.random() * 0.2; hasHalo = sizeBase > 0.8; }
+      return { x, y, size, brightness, color: starColors[Math.floor(Math.random() * starColors.length)], hasHalo, layer };
     };
 
-    // Fill background layers
     for (let i = 0; i < 2500; i++) {
       const r = Math.sqrt(Math.random()) * worldSize;
       const theta = Math.random() * Math.PI * 2;
       const layer = Math.random() > 0.9 ? 2 : (Math.random() > 0.6 ? 1 : 0);
       stars.push(createStar(Math.cos(theta) * r, Math.sin(theta) * r, layer));
     }
-
-    // Add 5-8 dense star clusters
     for (let c = 0; c < 6; c++) {
       const cx = (Math.random() - 0.5) * worldSize;
       const cy = (Math.random() - 0.5) * worldSize;
@@ -160,12 +141,9 @@ const Game: React.FC<GameProps> = ({
         stars.push(createStar(cx + Math.cos(theta) * r, cy + Math.sin(theta) * r, 0));
       }
     }
-
     starsRef.current = stars;
 
-    return () => {
-      audioManager.stopAll();
-    };
+    return () => { audioManager.stopAll(); };
   }, [status]);
 
   useEffect(() => {
@@ -176,15 +154,49 @@ const Game: React.FC<GameProps> = ({
     }
   }, [externalRotationDelta, status]);
 
+  // Orientation and Touch Controls for Mobile
   useEffect(() => {
     if (!isMobile) return;
+    
     const handleOrientation = (e: DeviceOrientationEvent) => {
       stateRef.current.tilt = { beta: e.beta || 0, gamma: e.gamma || 0 };
     };
-    window.addEventListener('deviceorientation', handleOrientation);
-    return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, [isMobile]);
 
+    const handleTouchStart = (e: TouchEvent) => {
+      audioManager.resume();
+      stateRef.current.lastTouchX = e.touches[0].clientX;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (status === GameState.SUCCESS || status === GameState.FAILED) return;
+      const currentX = e.touches[0].clientX;
+      const deltaX = currentX - stateRef.current.lastTouchX;
+      
+      // Horizontal swipe sensitivity for mobile
+      const multiplier = status === GameState.STABILIZING ? -0.001 : 0.001; 
+      
+      if (status === GameState.STABILIZING) {
+        stateRef.current.currentStationSpin += deltaX * multiplier;
+      } else {
+        stateRef.current.shipRotationSpeed += deltaX * multiplier;
+      }
+      
+      stateRef.current.lastTouchX = currentX;
+      if (e.cancelable) e.preventDefault();
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isMobile, status]);
+
+  // Mouse Controls for Computer
   useEffect(() => {
     if (isMobile) return;
     const handleMouseMove = (e: MouseEvent) => {
@@ -274,7 +286,7 @@ const Game: React.FC<GameProps> = ({
       if (!state.gameStartTime) state.gameStartTime = time;
 
       let rawThrust = Math.abs(externalRotationDelta) * 50; 
-      if (state.isMouseDown) rawThrust += 0.5;
+      if (state.isMouseDown || (isMobile && state.lastTouchX !== 0)) rawThrust += 0.5;
       state.activeThrust = state.activeThrust * 0.9 + Math.min(1.0, rawThrust) * 0.1;
 
       if (status === GameState.PLAYING) {
@@ -376,12 +388,10 @@ const Game: React.FC<GameProps> = ({
       
       const worldRotation = -state.shipRotation;
 
-      // --- RENDER BACKGROUND ---
       ctx.save();
       ctx.translate(cx + shakeX, cy + shakeY);
       ctx.rotate(worldRotation);
 
-      // Draw Nebulae
       nebulaeRef.current.forEach(neb => {
         const grad = ctx.createRadialGradient(neb.x, neb.y, 0, neb.x, neb.y, neb.size);
         grad.addColorStop(0, neb.color);
@@ -391,8 +401,6 @@ const Game: React.FC<GameProps> = ({
         ctx.beginPath(); ctx.arc(neb.x, neb.y, neb.size, 0, Math.PI * 2); ctx.fill();
       });
 
-      // Draw Stars (Layered)
-      // Layer 0: Distant / Clusters
       ctx.globalAlpha = 1;
       ctx.beginPath();
       starsRef.current.filter(s => s.layer === 0).forEach(s => {
@@ -403,7 +411,6 @@ const Game: React.FC<GameProps> = ({
       });
       ctx.fill();
 
-      // Layer 1: Mid-field
       ctx.beginPath();
       starsRef.current.filter(s => s.layer === 1).forEach(s => {
         ctx.fillStyle = s.color;
@@ -413,7 +420,6 @@ const Game: React.FC<GameProps> = ({
       });
       ctx.fill();
 
-      // Layer 2: Near / Bright with Halos
       starsRef.current.filter(s => s.layer === 2).forEach(s => {
         ctx.save();
         ctx.globalAlpha = s.brightness;
@@ -431,7 +437,6 @@ const Game: React.FC<GameProps> = ({
       const driftX = state.tilt.gamma * TILT_DRIFT_MULTIPLIER;
       const driftY = state.tilt.beta * TILT_DRIFT_MULTIPLIER;
 
-      // --- SPACE STATION ---
       ctx.save();
       ctx.translate(cx - driftX + shakeX, cy - driftY + shakeY);
       ctx.rotate(state.stationRotation + worldRotation);
@@ -461,7 +466,6 @@ const Game: React.FC<GameProps> = ({
       ctx.beginPath(); ctx.arc(45, 0, 5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
 
-      // --- RANGER (PLAYER) ---
       ctx.save();
       ctx.translate(cx + shakeX, cy + shakeY);
       const shipScale = Math.min(1.0, viewScale);
@@ -508,7 +512,7 @@ const Game: React.FC<GameProps> = ({
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [status, onFinish, onDocking, externalRotationDelta]);
+  }, [status, onFinish, onDocking, externalRotationDelta, isMobile]);
 
   return (
     <div className="w-full h-full relative">

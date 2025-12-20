@@ -35,7 +35,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, deviceType }) => {
           </div>
           <p className="text-[11px] text-gray-400 leading-relaxed">
             {isMobile 
-              ? "Use Hand Gestures (Circular motion) to match the station's RPM." 
+              ? "Circular hand gestures via camera OR horizontal touch swipes to adjust RPM." 
               : "Use Mouse Wheel or Click-Drag to sync your rotation with the Endurance."}
           </p>
         </div>
@@ -69,7 +69,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, deviceType }) => {
           onClick={() => handleStart(false)}
           className="w-full py-3 bg-white/10 hover:bg-white/20 text-white/70 hover:text-white font-bold rounded-lg transition-all text-[11px] tracking-[0.15em] border border-white/5"
         >
-          SKIP CAMERA / USE TRADITIONAL CONTROLS
+          SKIP CAMERA / USE TOUCH SWIPES
         </button>
       </div>
       
