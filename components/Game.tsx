@@ -7,14 +7,14 @@ import {
   TARGET_STATION_SPIN, 
   INITIAL_DISTANCE, 
   APPROACH_SPEED, 
-  DOCKING_THRESHOLD_DISTANCE,
-  SPIN_MATCH_EPSILON,
-  TILT_MATCH_THRESHOLD,
-  TILT_DRIFT_MULTIPLIER,
-  MAX_DRIFT_RADIUS,
-  STABILIZATION_DECEL,
-  MISSION_TIME,
-  STABILIZATION_TARGET_RAD
+  DOCKING_THRESHOLD_DISTANCE, 
+  SPIN_MATCH_EPSILON, 
+  TILT_MATCH_THRESHOLD, 
+  TILT_DRIFT_MULTIPLIER, 
+  MAX_DRIFT_RADIUS, 
+  STABILIZATION_DECEL, 
+  MISSION_TIME, 
+  STABILIZATION_TARGET_RAD 
 } from '../constants';
 
 interface GameProps {
@@ -32,16 +32,17 @@ interface Star {
   y: number;
   size: number;
   brightness: number;
+  color: string;
+  hasHalo: boolean;
+  layer: number; // 0: far, 1: mid, 2: near
 }
 
-interface Particle {
+interface Nebula {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
   size: number;
+  color: string;
+  opacity: number;
 }
 
 const Game: React.FC<GameProps> = ({ 
@@ -56,7 +57,7 @@ const Game: React.FC<GameProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isMobile = deviceType === DeviceType.MOBILE;
   const starsRef = useRef<Star[]>([]);
-  const particlesRef = useRef<Particle[]>([]);
+  const nebulaeRef = useRef<Nebula[]>([]);
   
   const stateRef = useRef({
     stationRotation: 0,
@@ -96,20 +97,70 @@ const Game: React.FC<GameProps> = ({
       audioManager.playMusic(); 
     }
 
-    // High-performance starfield generation
     const stars: Star[] = [];
-    const count = 1200; 
-    const radius = Math.max(window.innerWidth, window.innerHeight) * 2.5;
-    for (let i = 0; i < count; i++) {
-      const r = Math.sqrt(Math.random()) * radius;
-      const theta = Math.random() * Math.PI * 2;
-      stars.push({
-        x: Math.cos(theta) * r,
-        y: Math.sin(theta) * r,
-        size: 0.5 + Math.random() * 2.5, 
-        brightness: 0.3 + Math.random() * 0.7 
+    const nebulae: Nebula[] = [];
+    const worldSize = Math.max(window.innerWidth, window.innerHeight) * 3;
+    
+    // 1. Generate Nebulae (Deep Space Background)
+    const nebulaColors = ['rgba(30, 58, 138, 0.1)', 'rgba(88, 28, 135, 0.1)', 'rgba(15, 23, 42, 0.15)'];
+    for (let i = 0; i < 8; i++) {
+      nebulae.push({
+        x: (Math.random() - 0.5) * worldSize,
+        y: (Math.random() - 0.5) * worldSize,
+        size: 400 + Math.random() * 800,
+        color: nebulaColors[Math.floor(Math.random() * nebulaColors.length)],
+        opacity: 0.2 + Math.random() * 0.3
       });
     }
+    nebulaeRef.current = nebulae;
+
+    // 2. Generate Starfield with clusters
+    const starColors = ['#ffffff', '#fff4ea', '#f8f7ff', '#cad8ff', '#fff5f2'];
+    
+    const createStar = (x: number, y: number, layer: number) => {
+      const sizeBase = Math.random();
+      let size = 0.5;
+      let brightness = 0.3;
+      let hasHalo = false;
+
+      if (layer === 0) { // Distant
+        size = 0.3 + Math.random() * 0.5;
+        brightness = 0.2 + Math.random() * 0.4;
+      } else if (layer === 1) { // Mid
+        size = 0.8 + Math.random() * 1.2;
+        brightness = 0.5 + Math.random() * 0.5;
+      } else { // Near
+        size = 1.8 + Math.random() * 2.2;
+        brightness = 0.8 + Math.random() * 0.2;
+        hasHalo = sizeBase > 0.8;
+      }
+
+      return {
+        x, y, size, brightness,
+        color: starColors[Math.floor(Math.random() * starColors.length)],
+        hasHalo, layer
+      };
+    };
+
+    // Fill background layers
+    for (let i = 0; i < 2500; i++) {
+      const r = Math.sqrt(Math.random()) * worldSize;
+      const theta = Math.random() * Math.PI * 2;
+      const layer = Math.random() > 0.9 ? 2 : (Math.random() > 0.6 ? 1 : 0);
+      stars.push(createStar(Math.cos(theta) * r, Math.sin(theta) * r, layer));
+    }
+
+    // Add 5-8 dense star clusters
+    for (let c = 0; c < 6; c++) {
+      const cx = (Math.random() - 0.5) * worldSize;
+      const cy = (Math.random() - 0.5) * worldSize;
+      for (let i = 0; i < 150; i++) {
+        const r = Math.pow(Math.random(), 2) * 300;
+        const theta = Math.random() * Math.PI * 2;
+        stars.push(createStar(cx + Math.cos(theta) * r, cy + Math.sin(theta) * r, 0));
+      }
+    }
+
     starsRef.current = stars;
 
     return () => {
@@ -139,28 +190,19 @@ const Game: React.FC<GameProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       if (status === GameState.SUCCESS || status === GameState.FAILED) return;
       audioManager.resume();
-      
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
       const ny = (e.clientY / window.innerHeight) * 2 - 1;
-      
       if (status === GameState.PLAYING) {
-        stateRef.current.tilt = {
-          beta: ny * 60,
-          gamma: nx * 60
-        };
+        stateRef.current.tilt = { beta: ny * 60, gamma: nx * 60 };
       }
-
       if (stateRef.current.isMouseDown) {
         const deltaX = e.clientX - stateRef.current.lastMouseX;
-        // Increased multiplier for more responsive dragging
         const multiplier = status === GameState.STABILIZING ? -0.002 : 0.002; 
-        
         if (status === GameState.STABILIZING) {
           stateRef.current.currentStationSpin += deltaX * multiplier;
         } else {
           stateRef.current.shipRotationSpeed += deltaX * multiplier;
         }
-        
         stateRef.current.lastMouseX = e.clientX;
       }
     };
@@ -175,17 +217,13 @@ const Game: React.FC<GameProps> = ({
     const handleWheel = (e: WheelEvent) => {
       if (status === GameState.SUCCESS || status === GameState.FAILED) return;
       audioManager.resume();
-
-      // Increased wheel sensitivity for tactile response
       const multiplier = status === GameState.STABILIZING ? 0.0002 : -0.0002; 
       const delta = e.deltaY * multiplier;
-
       if (status === GameState.STABILIZING) {
-        stateRef.current.currentStationSpin -= delta; // Reversed for intuitive scroll
+        stateRef.current.currentStationSpin -= delta;
       } else {
         stateRef.current.shipRotationSpeed += delta;
       }
-      
       if (e.cancelable) e.preventDefault();
     };
     window.addEventListener('mousemove', handleMouseMove);
@@ -205,7 +243,6 @@ const Game: React.FC<GameProps> = ({
     const flicker = 0.8 + Math.random() * 0.4;
     const length = power * 60 * flicker;
     const width = 6 + power * 15;
-
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(1, direction);
@@ -227,7 +264,7 @@ const Game: React.FC<GameProps> = ({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     let animationFrameId: number;
@@ -236,7 +273,6 @@ const Game: React.FC<GameProps> = ({
       const { current: state } = stateRef;
       if (!state.gameStartTime) state.gameStartTime = time;
 
-      // Update active thrust visual intensity
       let rawThrust = Math.abs(externalRotationDelta) * 50; 
       if (state.isMouseDown) rawThrust += 0.5;
       state.activeThrust = state.activeThrust * 0.9 + Math.min(1.0, rawThrust) * 0.1;
@@ -244,7 +280,6 @@ const Game: React.FC<GameProps> = ({
       if (status === GameState.PLAYING) {
         const elapsed = (time - state.gameStartTime) / 1000;
         state.timeLeft = Math.max(0, MISSION_TIME - elapsed);
-        
         if (state.timeLeft <= 0) {
           state.isFinished = true;
           state.failureReason = 'Time';
@@ -252,15 +287,11 @@ const Game: React.FC<GameProps> = ({
           onFinish(false);
           return;
         }
-
         state.stationRotation += state.currentStationSpin;
         state.shipRotation += state.shipRotationSpeed;
         state.distance -= APPROACH_SPEED;
-
         audioManager.updateBuzz(state.shipRotationSpeed);
         audioManager.updateTension(state.distance / INITIAL_DISTANCE);
-
-        // Proximity alert logic
         if (state.distance < 800) {
           const proximityIntensity = 1 - (state.distance / 800);
           const beepInterval = 1000 - (proximityIntensity * 900);
@@ -269,34 +300,26 @@ const Game: React.FC<GameProps> = ({
             state.lastProximityBeep = time;
           }
         }
-
-        // Drift calculation
         const driftX = state.tilt.gamma * TILT_DRIFT_MULTIPLIER;
         const driftY = state.tilt.beta * TILT_DRIFT_MULTIPLIER;
-        const driftDistance = Math.sqrt(driftX * driftX + driftY * driftY);
-        
-        if (driftDistance > MAX_DRIFT_RADIUS) {
+        if (Math.sqrt(driftX * driftX + driftY * driftY) > MAX_DRIFT_RADIUS) {
           state.isFinished = true;
           state.failureReason = 'Boundary';
           audioManager.playFailure();
           onFinish(false);
           return;
         }
-
         const spinDiff = Math.abs(state.shipRotationSpeed - state.currentStationSpin);
         const spinMatch = spinDiff < SPIN_MATCH_EPSILON;
         const tiltSeverity = Math.sqrt(state.tilt.beta ** 2 + state.tilt.gamma ** 2);
         const tiltMatch = tiltSeverity < TILT_MATCH_THRESHOLD;
-
         if (spinMatch && !state.wasSync) audioManager.playSyncAchieved();
         state.wasSync = spinMatch;
         if (tiltMatch && !state.wasAligned) audioManager.playAlignmentAchieved();
         state.wasAligned = tiltMatch;
-
         if (state.distance <= DOCKING_THRESHOLD_DISTANCE) {
-          if (spinMatch && tiltMatch) {
-            onDocking(); 
-          } else {
+          if (spinMatch && tiltMatch) onDocking(); 
+          else {
             state.isFinished = true;
             state.failureReason = 'Collision';
             audioManager.playFailure();
@@ -323,12 +346,9 @@ const Game: React.FC<GameProps> = ({
             audioManager.playSuccess();
             onFinish(true);
           }
-        } else {
-          state.syncTimer = 0;
-        }
+        } else state.syncTimer = 0;
       }
 
-      // Throttle UI updates for performance
       if (time - state.lastUpdate > 50) {
         setUiState({
           shipSpin: status === GameState.STABILIZING ? state.currentStationSpin : state.shipRotationSpeed,
@@ -342,32 +362,68 @@ const Game: React.FC<GameProps> = ({
         state.lastUpdate = time;
       }
 
-      // --- RENDERING ---
       const w = canvas.width;
       const h = canvas.height;
       const cx = w / 2;
       const cy = h / 2;
-
-      // Screen Shake (Atmospheric Tension)
       const currentSpin = status === GameState.STABILIZING ? state.currentStationSpin : state.shipRotationSpeed;
       const shakeMag = 0.2 + (Math.abs(currentSpin) * 12);
       const shakeX = (Math.random() - 0.5) * shakeMag;
       const shakeY = (Math.random() - 0.5) * shakeMag;
 
-      ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, w, h);
       
       const worldRotation = -state.shipRotation;
 
-      // Draw Stars
+      // --- RENDER BACKGROUND ---
       ctx.save();
       ctx.translate(cx + shakeX, cy + shakeY);
       ctx.rotate(worldRotation);
-      starsRef.current.forEach(star => {
-        ctx.globalAlpha = star.brightness;
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(star.x, star.y, star.size, star.size);
+
+      // Draw Nebulae
+      nebulaeRef.current.forEach(neb => {
+        const grad = ctx.createRadialGradient(neb.x, neb.y, 0, neb.x, neb.y, neb.size);
+        grad.addColorStop(0, neb.color);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.globalAlpha = neb.opacity;
+        ctx.beginPath(); ctx.arc(neb.x, neb.y, neb.size, 0, Math.PI * 2); ctx.fill();
+      });
+
+      // Draw Stars (Layered)
+      // Layer 0: Distant / Clusters
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      starsRef.current.filter(s => s.layer === 0).forEach(s => {
+        ctx.fillStyle = s.color;
+        ctx.globalAlpha = s.brightness * 0.5;
+        ctx.moveTo(s.x, s.y);
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      });
+      ctx.fill();
+
+      // Layer 1: Mid-field
+      ctx.beginPath();
+      starsRef.current.filter(s => s.layer === 1).forEach(s => {
+        ctx.fillStyle = s.color;
+        ctx.globalAlpha = s.brightness * 0.8;
+        ctx.moveTo(s.x, s.y);
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      });
+      ctx.fill();
+
+      // Layer 2: Near / Bright with Halos
+      starsRef.current.filter(s => s.layer === 2).forEach(s => {
+        ctx.save();
+        ctx.globalAlpha = s.brightness;
+        if (s.hasHalo) {
+          ctx.shadowBlur = 12 + Math.random() * 6;
+          ctx.shadowColor = s.color;
+        }
+        ctx.fillStyle = s.color;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
       });
       ctx.restore();
 
@@ -375,64 +431,47 @@ const Game: React.FC<GameProps> = ({
       const driftX = state.tilt.gamma * TILT_DRIFT_MULTIPLIER;
       const driftY = state.tilt.beta * TILT_DRIFT_MULTIPLIER;
 
-      // --- SPACE STATION (ENDURANCE) ---
+      // --- SPACE STATION ---
       ctx.save();
       ctx.translate(cx - driftX + shakeX, cy - driftY + shakeY);
       ctx.rotate(state.stationRotation + worldRotation);
       ctx.scale(viewScale, viewScale);
       
-      // Structural Bracing
       ctx.strokeStyle = '#333';
       ctx.lineWidth = 4;
       for (let i = 0; i < 4; i++) {
-        ctx.save();
-        ctx.rotate(i * Math.PI / 2);
+        ctx.save(); ctx.rotate(i * Math.PI / 2);
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(150, 0); ctx.stroke();
         ctx.restore();
       }
-
-      // Main Hub
       ctx.fillStyle = '#111';
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(0, 0, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-
-      // Outer Ring Hull
       ctx.strokeStyle = '#ddd';
       ctx.lineWidth = 6;
       ctx.beginPath(); ctx.arc(0, 0, 150, 0, Math.PI * 2); ctx.stroke();
-      
-      // Pod Modules
       for (let i = 0; i < 12; i++) {
-        ctx.save();
-        ctx.rotate((Math.PI * 2) / 12 * i);
+        ctx.save(); ctx.rotate((Math.PI * 2) / 12 * i);
         ctx.fillStyle = i % 3 === 0 ? '#444' : '#aaa';
         ctx.fillRect(140, -15, 20, 30);
         ctx.restore();
       }
-
-      // Port Identifier
       ctx.fillStyle = '#900';
       ctx.beginPath(); ctx.arc(45, 0, 5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
 
-      // --- RANGER (PLAYER) & HUD ---
+      // --- RANGER (PLAYER) ---
       ctx.save();
       ctx.translate(cx + shakeX, cy + shakeY);
       const shipScale = Math.min(1.0, viewScale);
       ctx.scale(shipScale, shipScale);
-      
-      // Crosshair
       ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
       ctx.lineWidth = 1;
       ctx.beginPath(); 
-      ctx.moveTo(-40, 0); ctx.lineTo(-10, 0); 
-      ctx.moveTo(40, 0); ctx.lineTo(10, 0);
-      ctx.moveTo(0, -40); ctx.lineTo(0, -10);
-      ctx.moveTo(0, 40); ctx.lineTo(0, 10);
+      ctx.moveTo(-40, 0); ctx.lineTo(-10, 0); ctx.moveTo(40, 0); ctx.lineTo(10, 0);
+      ctx.moveTo(0, -40); ctx.lineTo(0, -10); ctx.moveTo(0, 40); ctx.lineTo(0, 10);
       ctx.stroke();
-
-      // Active Thrusters
       if (status === GameState.PLAYING || status === GameState.STABILIZING) {
         if (state.activeThrust > 0.01) {
           if (state.shipRotationSpeed > 0) {
@@ -444,11 +483,7 @@ const Game: React.FC<GameProps> = ({
           }
         }
       }
-
-      // Ranger Hull Geometry
-      ctx.fillStyle = '#e5e7eb'; 
-      ctx.strokeStyle = '#111'; 
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#e5e7eb'; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(-35, 5); ctx.lineTo(-45, 15); ctx.lineTo(45, 15); ctx.lineTo(35, 5);
       ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -456,8 +491,8 @@ const Game: React.FC<GameProps> = ({
       ctx.beginPath();
       ctx.moveTo(-20, -18); ctx.lineTo(20, -18); ctx.lineTo(25, 12); ctx.lineTo(-25, 12);
       ctx.closePath(); ctx.fill(); ctx.stroke();
-
       ctx.restore();
+
       animationFrameId = requestAnimationFrame(render);
     };
 
