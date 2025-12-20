@@ -152,8 +152,15 @@ const Game: React.FC<GameProps> = ({
 
       if (stateRef.current.isMouseDown) {
         const deltaX = e.clientX - stateRef.current.lastMouseX;
-        const multiplier = status === GameState.STABILIZING ? -0.0005 : 0.0005; 
-        stateRef.current.shipRotationSpeed += deltaX * multiplier;
+        // Increased multiplier for more responsive dragging
+        const multiplier = status === GameState.STABILIZING ? -0.002 : 0.002; 
+        
+        if (status === GameState.STABILIZING) {
+          stateRef.current.currentStationSpin += deltaX * multiplier;
+        } else {
+          stateRef.current.shipRotationSpeed += deltaX * multiplier;
+        }
+        
         stateRef.current.lastMouseX = e.clientX;
       }
     };
@@ -168,8 +175,17 @@ const Game: React.FC<GameProps> = ({
     const handleWheel = (e: WheelEvent) => {
       if (status === GameState.SUCCESS || status === GameState.FAILED) return;
       audioManager.resume();
-      const multiplier = status === GameState.STABILIZING ? 0.00005 : -0.00005; 
-      stateRef.current.shipRotationSpeed += e.deltaY * multiplier;
+
+      // Increased wheel sensitivity for tactile response
+      const multiplier = status === GameState.STABILIZING ? 0.0002 : -0.0002; 
+      const delta = e.deltaY * multiplier;
+
+      if (status === GameState.STABILIZING) {
+        stateRef.current.currentStationSpin -= delta; // Reversed for intuitive scroll
+      } else {
+        stateRef.current.shipRotationSpeed += delta;
+      }
+      
       if (e.cancelable) e.preventDefault();
     };
     window.addEventListener('mousemove', handleMouseMove);
