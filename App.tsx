@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Game from './components/Game';
 import StartScreen from './components/StartScreen';
 import CameraOverlay from './components/CameraOverlay';
@@ -11,6 +10,28 @@ const App: React.FC = () => {
   const [deviceType, setDeviceType] = useState<DeviceType>(DeviceType.COMPUTER);
   const [rotationDelta, setRotationDelta] = useState(0);
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  
+  // --- 音频逻辑开始 ---
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // 确保你的 mp3 文件已上传到 public 文件夹并命名为 bgm.mp3
+    const audio = new Audio('./bgm.mp3'); 
+    audio.loop = true;
+    audio.volume = 0.5;
+    audioRef.current = audio;
+
+    return () => {
+      audio.pause();
+    };
+  }, []);
+
+  const playMusic = () => {
+    if (audioRef.current) {
+      audioRef.current.play().catch(err => console.log("Music play blocked:", err));
+    }
+  };
+  // --- 音频逻辑结束 ---
 
   useEffect(() => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -18,12 +39,12 @@ const App: React.FC = () => {
   }, []);
 
   const requestPermissions = async (useCamera: boolean) => {
+    // 用户点击开始时，触发音频播放 [cite: 27]
+    playMusic(); 
+
     try {
       if (useCamera) {
-        // Request camera first to ensure we have access
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // We don't stop the stream here if we want to use it immediately, 
-        // but CameraOverlay handles its own setup. This just checks permission.
         stream.getTracks().forEach(t => t.stop());
         setCameraEnabled(true);
       }
@@ -32,7 +53,7 @@ const App: React.FC = () => {
         if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
           const permission = await (DeviceOrientationEvent as any).requestPermission();
           if (permission !== 'granted') {
-            alert("Motion sensor access is required for orientation tracking. Please refresh and allow.");
+            alert("Motion sensor access is required for orientation tracking.");
             return;
           }
         }
@@ -41,7 +62,6 @@ const App: React.FC = () => {
       setGameState(GameState.PLAYING);
     } catch (err) {
       console.error("Initialization failed", err);
-      // Fallback to playing without camera if camera failed but wasn't strictly required
       if (useCamera) {
         alert("Camera access failed. Playing with standard controls.");
         setGameState(GameState.PLAYING);
