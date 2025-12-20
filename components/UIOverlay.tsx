@@ -29,7 +29,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   const tiltSeverity = Math.sqrt(tiltX * tiltX + tiltY * tiltY);
   const isAligned = tiltSeverity < TILT_MATCH_THRESHOLD;
   const isSync = spinMatchPercent > 92;
-  const isTimeCritical = timeLeft < 15;
 
   const driftX = tiltY * TILT_DRIFT_MULTIPLIER;
   const driftY = tiltX * TILT_DRIFT_MULTIPLIER;
@@ -56,15 +55,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               {isStabilizing ? "STABLE" : (distance / 10).toFixed(1) + "m"}
             </div>
           </div>
-          
-          {status === GameState.PLAYING && (
-            <div className="text-center bg-black/60 px-6 py-2 border border-white/10 rounded backdrop-blur-sm">
-              <div className="text-[10px] text-blue-300 uppercase tracking-[0.2em] mb-1">Time to Orbital Decay</div>
-              <div className={`text-2xl font-bold tabular-nums tracking-widest ${isTimeCritical ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toFixed(1).padStart(4, '0')}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="space-y-1 text-right bg-black/40 p-2 border-r border-blue-500 backdrop-blur-sm">
@@ -178,9 +168,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               <p className="text-gray-300 max-w-md mx-auto leading-relaxed uppercase text-[11px] tracking-[0.25em] font-light">
                 {status === GameState.SUCCESS 
                   ? "Station stabilized at 202 RPM. Endurance mainframe operational. Excellent work, Cooper." 
-                  : failureReason === 'Time' 
-                    ? "Atmospheric drag exceeded thruster capacity. Station lost to the gravity well." 
-                    : failureReason === 'Boundary'
+                  : failureReason === 'Boundary'
                     ? "Safe approach corridor violated. Navigation lock lost. Mission aborted."
                     : "Hull contact detected during high-speed rotation. Structural integrity compromised."}
               </p>

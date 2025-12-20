@@ -172,7 +172,6 @@ const Game: React.FC<GameProps> = ({
       const currentX = e.touches[0].clientX;
       const deltaX = currentX - stateRef.current.lastTouchX;
       
-      // Horizontal swipe sensitivity for mobile
       const multiplier = status === GameState.STABILIZING ? -0.001 : 0.001; 
       
       if (status === GameState.STABILIZING) {
@@ -290,20 +289,13 @@ const Game: React.FC<GameProps> = ({
       state.activeThrust = state.activeThrust * 0.9 + Math.min(1.0, rawThrust) * 0.1;
 
       if (status === GameState.PLAYING) {
-        const elapsed = (time - state.gameStartTime) / 1000;
-        state.timeLeft = Math.max(0, MISSION_TIME - elapsed);
-        if (state.timeLeft <= 0) {
-          state.isFinished = true;
-          state.failureReason = 'Time';
-          audioManager.playFailure();
-          onFinish(false);
-          return;
-        }
         state.stationRotation += state.currentStationSpin;
         state.shipRotation += state.shipRotationSpeed;
         state.distance -= APPROACH_SPEED;
+        
         audioManager.updateBuzz(state.shipRotationSpeed);
         audioManager.updateTension(state.distance / INITIAL_DISTANCE);
+        
         if (state.distance < 800) {
           const proximityIntensity = 1 - (state.distance / 800);
           const beepInterval = 1000 - (proximityIntensity * 900);
@@ -312,6 +304,7 @@ const Game: React.FC<GameProps> = ({
             state.lastProximityBeep = time;
           }
         }
+        
         const driftX = state.tilt.gamma * TILT_DRIFT_MULTIPLIER;
         const driftY = state.tilt.beta * TILT_DRIFT_MULTIPLIER;
         if (Math.sqrt(driftX * driftX + driftY * driftY) > MAX_DRIFT_RADIUS) {
@@ -321,14 +314,17 @@ const Game: React.FC<GameProps> = ({
           onFinish(false);
           return;
         }
+        
         const spinDiff = Math.abs(state.shipRotationSpeed - state.currentStationSpin);
         const spinMatch = spinDiff < SPIN_MATCH_EPSILON;
         const tiltSeverity = Math.sqrt(state.tilt.beta ** 2 + state.tilt.gamma ** 2);
         const tiltMatch = tiltSeverity < TILT_MATCH_THRESHOLD;
+        
         if (spinMatch && !state.wasSync) audioManager.playSyncAchieved();
         state.wasSync = spinMatch;
         if (tiltMatch && !state.wasAligned) audioManager.playAlignmentAchieved();
         state.wasAligned = tiltMatch;
+        
         if (state.distance <= DOCKING_THRESHOLD_DISTANCE) {
           if (spinMatch && tiltMatch) onDocking(); 
           else {
@@ -368,7 +364,7 @@ const Game: React.FC<GameProps> = ({
           distance: state.distance,
           tiltX: state.tilt.beta,
           tiltY: state.tilt.gamma,
-          timeLeft: state.timeLeft,
+          timeLeft: MISSION_TIME, // Static value as limit is removed
           failureReason: state.failureReason
         });
         state.lastUpdate = time;
