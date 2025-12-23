@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { GameState } from '../types';
-import { TILT_MATCH_THRESHOLD, MAX_DRIFT_RADIUS, TILT_DRIFT_MULTIPLIER, STABILIZATION_TARGET_RPM } from '../constants';
+import { MAX_DRIFT_RADIUS, TILT_DRIFT_MULTIPLIER, STABILIZATION_TARGET_RPM } from '../constants';
 
 interface UIOverlayProps {
   shipSpin: number;
@@ -21,14 +21,18 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 }) => {
   const isStabilizing = status === GameState.STABILIZING;
   
-  // Calculate how closely the speeds match as a percentage
+  // Speed Match Calculation
   const spinDiff = Math.abs(shipSpin - targetSpin);
-  const maxPossibleDiff = Math.max(Math.abs(targetSpin), 0.1); // Avoid division by zero
+  const maxPossibleDiff = Math.max(Math.abs(targetSpin), 0.1);
   const spinMatchPercent = Math.max(0, 100 - (spinDiff / maxPossibleDiff) * 100);
   
+  // Alignment Match Calculation (Normalized to a 15-unit scale for percentage display)
   const tiltSeverity = Math.sqrt(tiltX * tiltX + tiltY * tiltY);
-  const isAligned = tiltSeverity < TILT_MATCH_THRESHOLD;
-  const isSync = spinMatchPercent > 92;
+  const tiltMatchPercent = Math.max(0, 100 - (tiltSeverity / 15) * 100);
+
+  // New strict 98% threshold for "OK" (Green)
+  const isSync = spinMatchPercent >= 98;
+  const isAligned = tiltMatchPercent >= 98;
 
   const driftX = tiltY * TILT_DRIFT_MULTIPLIER;
   const driftY = tiltX * TILT_DRIFT_MULTIPLIER;
@@ -66,12 +70,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
       {/* Alignment Status Cue */}
       <div className="absolute top-[20%] left-1/2 -translate-x-1/2 text-center space-y-3">
         {isSync && status === GameState.PLAYING && (
-          <div className="text-blue-400 text-xs font-bold tracking-[0.4em] bg-blue-500/10 px-6 py-1 border border-blue-500/30 rounded uppercase">
+          <div className="text-green-400 text-xs font-bold tracking-[0.4em] bg-green-500/10 px-6 py-1 border border-green-500/30 rounded uppercase shadow-[0_0_15px_rgba(34,197,94,0.3)]">
             Rotation Synchronized
           </div>
         )}
         {isAligned && status === GameState.PLAYING && (
-          <div className="text-green-400 text-xs font-bold tracking-[0.4em] animate-pulse bg-green-500/10 px-6 py-1 border border-green-500/30 rounded uppercase">
+          <div className="text-green-400 text-xs font-bold tracking-[0.4em] animate-pulse bg-green-500/10 px-6 py-1 border border-green-500/30 rounded uppercase shadow-[0_0_15px_rgba(34,197,94,0.3)]">
             Axial Lock Achieved
           </div>
         )}
@@ -119,10 +123,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               className={`h-full transition-all duration-300 ${isSync ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.6)]' : 'bg-blue-600'}`} 
               style={{ width: `${Math.min(100, spinMatchPercent)}%` }}
             />
-            {/* Sync Target Line */}
-            <div className="absolute inset-y-0 right-[8%] w-0.5 bg-white/40 shadow-[0_0_5px_white]" title="Sync Threshold" />
+            {/* Sync Target Line at 98% */}
+            <div className="absolute inset-y-0 right-[2%] w-0.5 bg-white/40 shadow-[0_0_5px_white]" title="Sync Threshold (98%)" />
             
-            {/* Locked Indicator Overlay */}
             {isSync && (
               <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white uppercase tracking-[0.3em] pointer-events-none">
                 SYNC LOCKED
@@ -131,7 +134,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           </div>
         </div>
 
-        {/* Alignment Meter (Only during approach) */}
+        {/* Alignment Meter */}
         {!isStabilizing && (
           <div className="text-center space-y-2">
             <div className="flex justify-between items-end w-64 px-1">
@@ -139,15 +142,15 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 AXIAL ALIGNMENT
               </div>
               <div className={`text-xs font-bold tabular-nums ${isAligned ? 'text-green-400' : 'text-white'}`}>
-                {Math.max(0, 100 - (tiltSeverity / (TILT_MATCH_THRESHOLD * 2.5)) * 100).toFixed(0)}%
+                {tiltMatchPercent.toFixed(1)}%
               </div>
             </div>
             <div className="w-64 h-2 bg-gray-900/80 rounded-sm overflow-hidden border border-white/20 relative backdrop-blur-sm">
                <div 
                 className={`h-full transition-all duration-300 ${isAligned ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]' : 'bg-red-600/80'}`} 
-                style={{ width: `${Math.max(5, 100 - (tiltSeverity / (TILT_MATCH_THRESHOLD * 3)) * 100)}%` }}
+                style={{ width: `${tiltMatchPercent}%` }}
               />
-              <div className="absolute inset-y-0 right-[25%] w-px bg-white/30" />
+              <div className="absolute inset-y-0 right-[2%] w-px bg-white/30" title="Alignment Threshold (98%)" />
             </div>
           </div>
         )}
