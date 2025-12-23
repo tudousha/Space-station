@@ -53,7 +53,7 @@ const Game: React.FC<GameProps> = ({
   isPaused, 
   status, 
   deviceType,
-  externalRotationDelta 
+  externalRotationDelta
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isMobile = deviceType === DeviceType.MOBILE;
@@ -64,7 +64,7 @@ const Game: React.FC<GameProps> = ({
     stationRotation: 0,
     currentStationSpin: TARGET_STATION_SPIN,
     shipRotation: 0,
-    shipRotationSpeed: INITIAL_SHIP_SPIN, // Updated to start at -122 RPM
+    shipRotationSpeed: INITIAL_SHIP_SPIN, 
     distance: INITIAL_DISTANCE,
     tilt: { beta: 0, gamma: 0 },
     lastUpdate: 0,
@@ -204,9 +204,11 @@ const Game: React.FC<GameProps> = ({
       audioManager.resume();
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
       const ny = (e.clientY / window.innerHeight) * 2 - 1;
+      
       if (status === GameState.PLAYING) {
         stateRef.current.tilt = { beta: ny * 60, gamma: nx * 60 };
       }
+      
       if (stateRef.current.isMouseDown) {
         const deltaX = e.clientX - stateRef.current.lastMouseX;
         const multiplier = status === GameState.STABILIZING ? -0.002 : 0.002; 
@@ -327,8 +329,9 @@ const Game: React.FC<GameProps> = ({
         state.wasAligned = tiltMatch;
         
         if (state.distance <= DOCKING_THRESHOLD_DISTANCE) {
-          if (spinMatch && tiltMatch) onDocking(); 
-          else {
+          if (spinMatch && tiltMatch) {
+            onDocking(); 
+          } else {
             state.isFinished = true;
             state.failureReason = 'Collision';
             audioManager.playFailure();
@@ -376,6 +379,7 @@ const Game: React.FC<GameProps> = ({
       const cx = w / 2;
       const cy = h / 2;
       const currentSpin = status === GameState.STABILIZING ? state.currentStationSpin : state.shipRotationSpeed;
+      
       const shakeMag = 0.2 + (Math.abs(currentSpin) * 12);
       const shakeX = (Math.random() - 0.5) * shakeMag;
       const shakeY = (Math.random() - 0.5) * shakeMag;
