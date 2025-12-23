@@ -8,8 +8,9 @@ export const INITIAL_SHIP_SPIN = (INITIAL_SHIP_RPM * 2 * Math.PI) / 3600; // 22 
 export const INITIAL_DISTANCE = 3000; // Starts at 300m
 export const APPROACH_SPEED = 1.0; 
 export const DOCKING_THRESHOLD_DISTANCE = 50; 
-export const SPIN_MATCH_EPSILON = 0.01; 
-export const TILT_MATCH_THRESHOLD = 5.0; 
+// Tightened tolerances for 98% accuracy
+export const SPIN_MATCH_EPSILON = 0.004; 
+export const TILT_MATCH_THRESHOLD = 0.3; 
 export const TILT_DRIFT_MULTIPLIER = 6.0; 
 export const MAX_DRIFT_RADIUS = 250; 
 export const CIRCULAR_GESTURE_SENSITIVITY = 0.0025;
