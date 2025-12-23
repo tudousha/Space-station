@@ -2,6 +2,7 @@
 import React from 'react';
 import { DeviceType } from '../types';
 import { audioManager } from '../utils/audio';
+import { STABILIZATION_TARGET_RPM } from '../constants';
 
 interface StartScreenProps {
   onStart: (useCamera: boolean) => void;
@@ -74,7 +75,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, deviceType }) => {
       </div>
       
       <p className="mt-6 text-[9px] text-gray-600 uppercase tracking-widest">
-        Mission: Endurance Stabilization Protocol // 202 RPM Target
+        Mission: Endurance Stabilization Protocol // {STABILIZATION_TARGET_RPM} RPM Target
       </p>
     </div>
   );

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { GameState } from '../types';
-import { TILT_MATCH_THRESHOLD, MAX_DRIFT_RADIUS, TILT_DRIFT_MULTIPLIER } from '../constants';
+import { TILT_MATCH_THRESHOLD, MAX_DRIFT_RADIUS, TILT_DRIFT_MULTIPLIER, STABILIZATION_TARGET_RPM } from '../constants';
 
 interface UIOverlayProps {
   shipSpin: number;
@@ -83,7 +83,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         {isStabilizing && (
           <div className="space-y-4">
             <div className="text-orange-400 text-sm font-bold tracking-[0.4em] animate-pulse bg-orange-500/10 px-8 py-2 border border-orange-500/50 rounded uppercase backdrop-blur-md">
-              Stabilization Phase: Target 202 RPM
+              Stabilization Phase: Target {STABILIZATION_TARGET_RPM} RPM
             </div>
             <div className="text-white/60 text-[10px] tracking-widest uppercase">
               Control Law: Inverted Thrust Profile
@@ -167,7 +167,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             <div className="space-y-4">
               <p className="text-gray-300 max-w-md mx-auto leading-relaxed uppercase text-[11px] tracking-[0.25em] font-light">
                 {status === GameState.SUCCESS 
-                  ? "Station stabilized at 202 RPM. Endurance mainframe operational. Excellent work, Cooper." 
+                  ? `Station stabilized at ${STABILIZATION_TARGET_RPM} RPM. Endurance mainframe operational. Excellent work, Cooper.` 
                   : failureReason === 'Boundary'
                     ? "Safe approach corridor violated. Navigation lock lost. Mission aborted."
                     : "Hull contact detected during high-speed rotation. Structural integrity compromised."}

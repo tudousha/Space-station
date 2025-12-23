@@ -5,6 +5,7 @@ import { GameState, DeviceType } from '../types';
 import { audioManager } from '../utils/audio';
 import { 
   TARGET_STATION_SPIN, 
+  INITIAL_SHIP_SPIN,
   INITIAL_DISTANCE, 
   APPROACH_SPEED, 
   DOCKING_THRESHOLD_DISTANCE, 
@@ -63,7 +64,7 @@ const Game: React.FC<GameProps> = ({
     stationRotation: 0,
     currentStationSpin: TARGET_STATION_SPIN,
     shipRotation: 0,
-    shipRotationSpeed: 0,
+    shipRotationSpeed: INITIAL_SHIP_SPIN, // Updated to start at -122 RPM
     distance: INITIAL_DISTANCE,
     tilt: { beta: 0, gamma: 0 },
     lastUpdate: 0,
@@ -83,7 +84,7 @@ const Game: React.FC<GameProps> = ({
   });
 
   const [uiState, setUiState] = useState({
-    shipSpin: 0,
+    shipSpin: INITIAL_SHIP_SPIN,
     targetSpin: TARGET_STATION_SPIN,
     distance: INITIAL_DISTANCE,
     tiltX: 0,
@@ -364,7 +365,7 @@ const Game: React.FC<GameProps> = ({
           distance: state.distance,
           tiltX: state.tilt.beta,
           tiltY: state.tilt.gamma,
-          timeLeft: MISSION_TIME, // Static value as limit is removed
+          timeLeft: MISSION_TIME, 
           failureReason: state.failureReason
         });
         state.lastUpdate = time;
