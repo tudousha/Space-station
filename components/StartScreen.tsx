@@ -36,7 +36,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, deviceType }) => {
           </div>
           <p className="text-[11px] text-gray-400 leading-relaxed">
             {isMobile 
-              ? "Circular hand gestures via camera OR horizontal touch swipes to adjust RPM." 
+              ? "Swipe horizontally to adjust ship RPM and match the Endurance's rotation." 
               : "Use Mouse Wheel or Click-Drag to sync your rotation with the Endurance."}
           </p>
         </div>
@@ -55,22 +55,29 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, deviceType }) => {
       </div>
 
       <div className="flex flex-col gap-3">
+        {/* Primary Action: Standard Controls (Skip Camera) */}
         <button 
-          onClick={() => handleStart(true)}
+          onClick={() => handleStart(false)}
           className="group relative overflow-hidden w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-lg transition-all tracking-[0.2em] shadow-lg shadow-blue-900/20"
         >
           <span className="relative z-10 flex items-center justify-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-            USE HAND GESTURE SYNC
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+            INITIATE STANDARD SEQUENCE
           </span>
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]"></div>
         </button>
         
+        {/* Secondary Action: Hand Gesture (Camera) */}
         <button 
-          onClick={() => handleStart(false)}
-          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white/70 hover:text-white font-bold rounded-lg transition-all text-[11px] tracking-[0.15em] border border-white/5"
+          onClick={() => handleStart(true)}
+          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white/70 hover:text-white font-bold rounded-lg transition-all text-[11px] tracking-[0.15em] border border-white/5 flex items-center justify-center gap-2"
         >
-          SKIP CAMERA / USE TOUCH SWIPES
+          <svg className="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+          </svg>
+          USE HAND GESTURE SYNC (CAMERA)
         </button>
       </div>
       
