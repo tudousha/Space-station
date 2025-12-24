@@ -1,27 +1,31 @@
 # ENDURANCE: ORBITAL DOCKING SIMULATOR
 
-> **"No time for caution."**
+![Endurance Poster](https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=1600&h=600&q=80)
 
-![Endurance Banner](https://img.shields.io/badge/MISSION-ENDURANCE-cyan?style=for-the-badge)
-![Status](https://img.shields.io/badge/STATUS-OPERATIONAL-success?style=for-the-badge)
+> **"It's not impossible. It's necessary."**
+
+![Mission Badge](https://img.shields.io/badge/MISSION-ENDURANCE-cyan?style=for-the-badge)
+![Status Badge](https://img.shields.io/badge/STATUS-OPERATIONAL-success?style=for-the-badge)
 
 ## 🎯 THE MISSION
-Synchronize your Ranger spacecraft with the spinning Endurance station. Match the **120 RPM** rotation and maintain axial alignment to avoid catastrophic collision.
+Take control as **Cooper** in this high-fidelity recreation of the iconic docking scene from *Interstellar*. 
 
-## 🕹️ CONTROLS
+The Endurance station is spinning at a critical, lethal velocity. To save the mission, you must manually pilot the Ranger to match the station's **120 RPM** rotation exactly while maintaining perfect axial alignment. There is no time for caution.
 
-| Action | Desktop | Mobile |
+## 🕹️ PILOT CONTROLS
+
+| Flight Mode | Desktop | Mobile |
 | :--- | :--- | :--- |
-| **Rotation** | 🖱️ Wheel / Drag X | 👆 Swipe Horizontal |
-| **Alignment** | 🖱️ Mouse Move | 📱 Tilt (Gyro) |
-| **Gesture** | ✋ Circular Hand Motion (Camera) | N/A |
+| **Rotation (Sync)** | 🖱️ Scroll / Drag X | 👆 Swipe Horizontal |
+| **Axial (Alignment)** | 🖱️ Mouse Precision | 📱 Gyroscope Tilt |
+| **Gesture (AI)** | ✋ Hand Tracking | N/A |
 
-## 🛠️ SPECS
-- **Target:** 120 RPM (Sync required: 98%+)
-- **System:** NASA RANGER V4.2
-- **Audio:** Dynamic tension-based cinematic score
-- **UI:** High-density NASA-Brutalist HUD
+## 🛠️ TECHNICAL SPECS
+- **Interface:** NASA RANGER V4.2 Brutalist HUD
+- **Sync Tolerance:** 98% Accuracy Required
+- **Environment:** Procedural Starfield & Nebula
+- **Audio:** Dynamic Tension-Based Score
 
 ---
 
-**[ INITIATE MANUAL OVERRIDE ]**
+**[ INITIATE DOCKING SEQUENCE ]**
